@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Boss直聘助手
 // @namespace    http://tampermonkey.net/
-// @version      8.6.3
+// @version      8.6.4
 // @description  Boss直聘助手
 // @author       jkl&ai
 // @match        https://www.zhipin.com/*
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
     // -------------------- 全局常量定义 --------------------
-    const SCRIPT_VERSION = '8.6.3'; // 更新版本号
+    const SCRIPT_VERSION = '8.6.4'; // 更新版本号
 
     // -------------------- 配置 --------------------
     const DELAY_MIN = 1000;
@@ -179,6 +179,7 @@
         educationKeywords: /大学|学院|学校|本科|硕士|博士|大专|学位|专业|工程/i,
 
         convoRoot: '.conversation-message, .chat-message-list, .chat-message-list.is-to-top',
+        chatScrollableContainer: '.chat-message-list.is-to-top', // 可滚动的消息列表
         messageItems: '.chat-message-list .message-item, .message-item',
         messageTime: '.message-time .time, .message-time span.time, .time',
         messageCard: '.message-card-top-title, .message-card-top-text, .message-card-top-title h3',
@@ -615,6 +616,26 @@
                 return;
             }
 
+            // 寻找实际可滚动的聊天内容容器
+            let chatScrollableContainer = convoRoot.querySelector(SELECTORS.chatScrollableContainer);
+
+            // 如果特定的滚动容器未找到，尝试使用根元素作为滚动容器
+            if (!chatScrollableContainer) {
+                logManager.addOperationLog('未找到聊天内容可滚动容器 (尝试使用根元素作为滚动容器)', 'warning');
+                if (convoRoot.scrollHeight > convoRoot.clientHeight) {
+                    chatScrollableContainer = convoRoot; // 如果根元素可滚动，则使用它
+                } else {
+                    logManager.addOperationLog('聊天内容根元素也无法滚动，跳过拟人化阅读', 'warning');
+                    return;
+                }
+            }
+            
+            // 再次检查容器是否真的可滚动
+            if (chatScrollableContainer.scrollHeight <= chatScrollableContainer.clientHeight) {
+                logManager.addOperationLog('聊天内容容器无需滚动 (内容未溢出)', 'info');
+                return;
+            }
+
             // 获取当前模式配置
             const modeConfig = CHAT_READING_CONFIG.MODE_CONFIGS[mode] ||
                                CHAT_READING_CONFIG.MODE_CONFIGS[CHAT_READING_CONFIG.DEFAULT_MODE];
@@ -717,7 +738,9 @@
                 }
 
                 // 滚动到消息位置
-                await smoothScrollToMessage(message, convoRoot);
+                //await smoothScrollToMessage(message, convoRoot);
+                // 使用改进的滚动函数
+                await scrollToMessageWithFallback(message, chatScrollableContainer);
 
                 // 模拟阅读时间
                 await new Promise(resolve => setTimeout(resolve, readingDelay));
@@ -888,6 +911,94 @@
             }
         });
     }
+
+    // 新增的滚动函数，用于替代原来的滚动功能
+    async function scrollToMessageWithFallback(messageElement, container) {
+        return new Promise(async (resolve) => {
+            try {
+                if (!messageElement || !container) {
+                    resolve();
+                    return;
+                }
+
+                // 方法1：尝试使用scrollIntoView
+                try {
+                    messageElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                    
+                    // 等待滚动完成
+                    await new Promise(r => setTimeout(r, getDelay(DELAYS.SCROLL_WAIT_TIME)));
+                    
+                    // 检查是否成功滚动到视图中
+                    const rect = messageElement.getBoundingClientRect();
+                    const containerRect = container.getBoundingClientRect();
+                    
+                    if (rect.top >= containerRect.top && rect.bottom <= containerRect.bottom) {
+                        // 成功滚动到视图中
+                        resolve();
+                        return;
+                    }
+                } catch (e) {
+                    console.log('scrollIntoView方法失败，尝试备用方法', e);
+                }
+                
+                // 方法2：使用scrollTo计算位置
+                try {
+                    const containerRect = container.getBoundingClientRect();
+                    const elementRect = messageElement.getBoundingClientRect();
+                    
+                    // 计算元素相对于容器的位置
+                    const relativeTop = elementRect.top - containerRect.top + container.scrollTop;
+                    const scrollTarget = relativeTop - (container.clientHeight / 2) + (elementRect.height / 2);
+                    
+                    // 执行平滑滚动
+                    const startPos = container.scrollTop;
+                    const distance = scrollTarget - startPos;
+                    
+                    if (Math.abs(distance) > 5) { // 只有在有明显滚动距离时才执行
+                        const steps = 20;
+                        const stepDelay = 15;
+                        const stepDistance = distance / steps;
+                        
+                        for (let i = 0; i < steps; i++) {
+                            container.scrollTop = startPos + stepDistance * i;
+                            await new Promise(r => setTimeout(r, stepDelay));
+                        }
+                        
+                        // 确保最终位置准确
+                        container.scrollTop = scrollTarget;
+                    }
+                    
+                    await new Promise(r => setTimeout(r, 100));
+                } catch (e) {
+                    console.log('scrollTo方法失败，尝试最后的备用方法', e);
+                    
+                    // 方法3：使用事件模拟
+                    try {
+                        const wheelEvent = new WheelEvent('wheel', {
+                            deltaY: elementRect.top < containerRect.top ? -100 : 100,
+                            deltaMode: 0,
+                            bubbles: true,
+                            cancelable: true
+                        });
+                        
+                        container.dispatchEvent(wheelEvent);
+                        await new Promise(r => setTimeout(r, 300));
+                    } catch (e) {
+                        console.log('所有滚动方法都失败了', e);
+                    }
+                }
+                
+                resolve();
+            } catch (error) {
+                console.error('滚动到消息出错:', error);
+                resolve();
+            }
+        });
+    }
+
 
     // -------------------- DOM操作工具函数 --------------------
     // 安全DOM元素创建函数
