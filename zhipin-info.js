@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Boss直聘助手
 // @namespace    http://tampermonkey.net/
-// @version      8.6.5
+// @version      8.6.6
 // @description  Boss直聘助手
 // @author       jkl&ai
 // @match        https://www.zhipin.com/*
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
     // -------------------- 全局常量定义 --------------------
-    const SCRIPT_VERSION = '8.6.5'; // 更新版本号
+    const SCRIPT_VERSION = '8.6.6'; // 更新版本号
 
     // -------------------- 配置 --------------------
     const DELAY_MIN = 1000;
@@ -198,7 +198,7 @@
     // 修复后的正则表达式（避免语法错误，确保浏览器兼容）
     const PATTERNS = {
         age: /(\d{1,2})\s*岁/,
-        experience: /(\d{1,2}年\s*应届生|\d{1,2}年(?:\s*以上)?|(?:\d{2}年)?\s*应届生|多年(?:\s*经验)?|10年以上|\d{1,2}年(?:\s*实习(?:经验)?)?|\d{1,2}年(?:\s*工作经验)?)/i,
+        experience: /(\d{1,2}年\s*毕业|\d{1,2}年\s*应届生|\d{1,2}年(?:\s*以上)?|(?:\d{2}年)?\s*应届生|多年(?:\s*经验)?|10年以上|\d{1,2}年(?:\s*实习(?:经验)?)?|\d{1,2}年(?:\s*工作经验)?)/i,
         education: /(博士|硕士|本科|学士|专科|大专|高中|中专|初中)/,
         salary: /([0-9]+[-~‑–]?[0-9]*K|\d+K|面议)/i,
         // 修复 cleanMessagePrefix：去掉 /s 标记，使用 . 匹配换行（浏览器兼容性更好）
@@ -1926,7 +1926,11 @@
                     }
                     if (experience === 'N/A') {
                         // 直接尝试匹配完整格式，优先匹配"X年应届生"
-                        const fullMatch = infoText.match(/(\d{1,2}年\s*应届生)/);
+                        let fullMatch = infoText.match(/(\d{1,2}年\s*应届生)/);
+                        if (fullMatch) {
+                            experience = fullMatch[0].trim();
+                        }
+                        fullMatch = infoText.match(/(\d{1,2}年\s*毕业)/);
                         if (fullMatch) {
                             experience = fullMatch[0].trim();
                         } else {
