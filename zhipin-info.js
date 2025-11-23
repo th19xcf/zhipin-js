@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Boss直聘助手
 // @namespace    http://tampermonkey.net/
-// @version      8.6.4
+// @version      8.6.5
 // @description  Boss直聘助手
 // @author       jkl&ai
 // @match        https://www.zhipin.com/*
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
     // -------------------- 全局常量定义 --------------------
-    const SCRIPT_VERSION = '8.6.4'; // 更新版本号
+    const SCRIPT_VERSION = '8.6.5'; // 更新版本号
 
     // -------------------- 配置 --------------------
     const DELAY_MIN = 1000;
@@ -3211,9 +3211,25 @@
                     // 获取当前候选人在可见列表中的位置
                     const visibleIndex = visibleCandidates.indexOf(currentCandidate);
 
+                    let beforeScroll = SCROLL_CONFIG.PROCESS_BEFORE_SCROLL - 1; // 转换为0-based索引
+                    let scrollStep = 4;
+
+                    let random = Math.random();
+                    if ( random < 0.03) {
+                        beforeScroll = 5;
+                        scrollStep = 2;
+                    } else if ( random < 0.1) {
+                        beforeScroll = 6;
+                        scrollStep = 3;
+                    } else {
+                        beforeScroll = 7;
+                        scrollStep = 4;
+                    }
+
+
                     // 检查是否在滚动触发位置（可见列表中的第8个人，索引为7）
-                    if (visibleIndex >= SCROLL_CONFIG.PROCESS_BEFORE_SCROLL - 1) {
-                        logManager.addOperationLog(`处理到可见列表第${SCROLL_CONFIG.PROCESS_BEFORE_SCROLL}个候选人(${currentName})，触发人工模拟滚动`, 'info');
+                    if (visibleIndex >= beforeScroll) {
+                        logManager.addOperationLog(`处理到可见列表第${beforeScroll}个候选人(${currentName})，触发人工模拟滚动`, 'info');
 
                         // 保存当前候选人信息以便滚动后重新定位
                         let currentCandidateId = null;
@@ -3230,7 +3246,7 @@
                         const currentCandidateName = currentName;
 
                         // 向下人工模拟滚动指定数量的候选人 - 不改变当前选中候选人
-                        await scrollDownByCandidates(SCROLL_CONFIG.SCROLL_BY_COUNT);
+                        await scrollDownByCandidates(scrollStep);
 
                         // 等待滚动完成和新内容加载
                         await new Promise(resolve => setTimeout(resolve, getDelay(SCROLL_CONFIG.SCROLL_CHECK_DELAY) * 2));
